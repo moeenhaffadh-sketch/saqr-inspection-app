@@ -1,0 +1,68 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Hide Next.js development indicators and overlays in camera views */
+[data-nextjs-dialog],
+[data-nextjs-toast],
+nextjs-portal,
+#__next-build-watcher,
+#__next-prerender-indicator,
+[data-next-mark],
+[id^="__next"] {
+  z-index: 0 !important;
+}
+
+/* Suppress any Next.js logo or branding overlays */
+img[src*="next"],
+img[alt*="Next"],
+img[alt*="Vercel"],
+a[href*="nextjs.org"],
+a[href*="vercel.com"] {
+  display: none !important;
+}
+
+/* Ensure camera page back button is always accessible */
+.camera-back-btn {
+  position: relative !important;
+  z-index: 9999 !important;
+  isolation: isolate !important;
+  pointer-events: auto !important;
+}
+
+/* Camera view container - highest stacking context */
+.camera-view {
+  z-index: 9000 !important;
+}
+
+/* Safe area padding utilities */
+.pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}

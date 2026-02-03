@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Pure Camera Test</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body style="margin:0; background:#000; color:#fff; font-family:system-ui;">
+  <div style="padding:20px;">
+    <h1>Pure HTML Camera Test</h1>
+    <p>No React, No Next.js - just plain JavaScript</p>
+
+    <video id="video" autoplay playsinline muted style="width:100%; max-width:640px; background:#333;"></video>
+
+    <div style="margin-top:20px;">
+      <button onclick="startCamera()" style="padding:10px 20px; font-size:16px;">Start Camera</button>
+      <button onclick="stopCamera()" style="padding:10px 20px; font-size:16px; margin-left:10px;">Stop Camera</button>
+    </div>
+
+    <div id="status" style="margin-top:20px; padding:10px; background:#222;"></div>
+    <pre id="logs" style="margin-top:10px; padding:10px; background:#111; font-size:12px; max-height:300px; overflow:auto;"></pre>
+  </div>
+
+  <script>
+    const video = document.getElementById('video');
+    const status = document.getElementById('status');
+    const logs = document.getElementById('logs');
+    let stream = null;
+
+    function log(msg) {
+      const time = new Date().toLocaleTimeString();
+      console.log('[CameraTest]', msg);
+      logs.textContent = `${time}: ${msg}\n` + logs.textContent;
+    }
+
+    function setStatus(msg, isError = false) {
+      status.textContent = msg;
+      status.style.color = isError ? '#f66' : '#0f0';
+    }
+
+    async function startCamera() {
+      log('=== Starting camera ===');
+      log('navigator.mediaDevices: ' + !!navigator.mediaDevices);
+      log('getUserMedia: ' + !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia));
+      log('video element: ' + !!video);
+
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        setStatus('ERROR: Camera API not available', true);
+        return;
+      }
+
+      // Stop existing stream
+      if (stream) {
+        log('Stopping existing stream');
+        stream.getTracks().forEach(t => t.stop());
+        stream = null;
+      }
+
+      // Enumerate devices first
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoDevices = devices.filter(d => d.kind === 'videoinput');
+        log('Video devices found: ' + videoDevices.length);
+        videoDevices.forEach((d, i) => log('  ' + i + ': ' + (d.label || 'unnamed')));
+      } catch (e) {
+        log('enumerateDevices error: ' + e.message);
+      }
+
+      // Try to get camera
+      setStatus('Requesting camera...');
+
+      const attempts = [
+        { name: 'video: true', constraints: { video: true } },
+        { name: 'video: {}', constraints: { video: {} } },
+        { name: 'facingMode: user', constraints: { video: { facingMode: 'user' } } },
+      ];
+
+      for (const attempt of attempts) {
+        try {
+          log('Trying: ' + attempt.name);
+          stream = await navigator.mediaDevices.getUserMedia(attempt.constraints);
+          log('SUCCESS with ' + attempt.name);
+          log('Stream tracks: ' + stream.getTracks().length);
+
+          video.srcObject = stream;
+          await video.play();
+
+          setStatus('Camera working! (' + attempt.name + ')');
+          log('Video playing: ' + video.videoWidth + 'x' + video.videoHeight);
+          return;
+        } catch (e) {
+          log('FAILED ' + attempt.name + ': ' + e.name + ' - ' + e.message);
+        }
+      }
+
+      setStatus('ERROR: All camera attempts failed', true);
+    }
+
+    function stopCamera() {
+      if (stream) {
+        stream.getTracks().forEach(t => t.stop());
+        stream = null;
+        video.srcObject = null;
+        setStatus('Camera stopped');
+        log('Camera stopped');
+      }
+    }
+
+    // Auto-start
+    log('Page loaded, URL: ' + window.location.href);
+    log('Protocol: ' + window.location.protocol);
+    log('UserAgent: ' + navigator.userAgent.split(' ').slice(-2).join(' '));
+
+    setTimeout(startCamera, 500);
+  </script>
+</body>
+</html>

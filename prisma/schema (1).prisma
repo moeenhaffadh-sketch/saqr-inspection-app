@@ -1,0 +1,268 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// Users synced from Clerk
+model User {
+  id            String   @id // Clerk user ID
+  email         String   @unique
+  firstName     String?
+  lastName      String?
+  imageUrl      String?
+  role          UserRole @default(USER)
+  organizationId String?
+  organization  Organization? @relation(fields: [organizationId], references: [id])
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  inspections   Inspection[]
+  createdSpecs  InspectionSpec[] @relation("SpecCreator")
+
+  @@index([organizationId])
+  @@index([email])
+}
+
+enum UserRole {
+  USER
+  INSPECTOR
+  ADMIN
+  SUPER_ADMIN
+}
+
+// Organizations (companies being inspected)
+model Organization {
+  id            String   @id @default(cuid())
+  name          String
+  nameAr        String?
+  crNumber      String?  // Commercial Registration number
+  country       String   @default("BH") // ISO country code
+  address       String?
+  phone         String?
+  email         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  users         User[]
+  sites         Site[]
+  inspections   Inspection[]
+
+  @@index([crNumber])
+  @@index([country])
+}
+
+// Sites/Locations to inspect
+model Site {
+  id             String   @id @default(cuid())
+  name           String
+  nameAr         String?
+  address        String
+  addressAr      String?
+  latitude       Float?
+  longitude      Float?
+  gpsRadius      Int      @default(100) // meters for GPS verification
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Relations
+  inspections    Inspection[]
+
+  @@index([organizationId])
+}
+
+// Regulatory Authorities
+model Authority {
+  id          String   @id @default(cuid())
+  code        String   @unique // MOH, MOIC, GDCD, NHRA, MUNICIPALITY
+  name        String
+  nameAr      String
+  country     String   @default("BH")
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  categories  InspectionCategory[]
+
+  @@index([country])
+}
+
+// Inspection Categories (Facility, Pest Control, Fire Safety, etc.)
+model InspectionCategory {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  nameAr      String
+  description String?
+  descriptionAr String?
+  icon        String?
+  color       String   @default("#3b82f6")
+  authorityId String
+  authority   Authority @relation(fields: [authorityId], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  specs       InspectionSpec[]
+  inspections Inspection[]
+
+  @@index([authorityId])
+}
+
+// Individual inspection requirements/specs
+model InspectionSpec {
+  id            String   @id @default(cuid())
+  code          String   // FL-01, PC-02, etc.
+  requirement   String   // English requirement text
+  requirementAr String   // Arabic requirement text
+  category      String   // Category within inspection type
+  evidenceType  EvidenceType @default(PHOTO)
+  aiFeasibility AIFeasibility @default(MEDIUM)
+  guidance      String?  // AI guidance for capturing evidence
+  guidanceAr    String?
+  isActive      Boolean  @default(true)
+  sortOrder     Int      @default(0)
+
+  categoryId    String
+  inspectionCategory InspectionCategory @relation(fields: [categoryId], references: [id])
+  createdById   String?
+  createdBy     User?    @relation("SpecCreator", fields: [createdById], references: [id])
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  results       InspectionResult[]
+
+  @@unique([categoryId, code])
+  @@index([categoryId])
+  @@index([isActive])
+}
+
+enum EvidenceType {
+  PHOTO
+  DOCUMENT
+  QR_BARCODE
+  MANUAL
+}
+
+enum AIFeasibility {
+  HIGH
+  MEDIUM
+  LOW
+}
+
+// Main Inspection record
+model Inspection {
+  id             String   @id @default(cuid())
+  status         InspectionStatus @default(DRAFT)
+  startedAt      DateTime?
+  completedAt    DateTime?
+
+  // Location verification
+  gpsVerified    Boolean  @default(false)
+  gpsLatitude    Float?
+  gpsLongitude   Float?
+
+  // Scoring
+  totalItems     Int      @default(0)
+  passedItems    Int      @default(0)
+  failedItems    Int      @default(0)
+  passRate       Float?
+
+  // Live session
+  isLiveSession  Boolean  @default(false)
+  liveSessionId  String?  @unique
+
+  // Relations
+  userId         String
+  user           User     @relation(fields: [userId], references: [id])
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  siteId         String?
+  site           Site?    @relation(fields: [siteId], references: [id])
+  categoryId     String
+  category       InspectionCategory @relation(fields: [categoryId], references: [id])
+
+  results        InspectionResult[]
+  report         Report?
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([userId])
+  @@index([organizationId])
+  @@index([siteId])
+  @@index([categoryId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+enum InspectionStatus {
+  DRAFT
+  IN_PROGRESS
+  PENDING_REVIEW
+  COMPLETED
+  CANCELLED
+}
+
+// Individual inspection results
+model InspectionResult {
+  id            String   @id @default(cuid())
+  status        ResultStatus?
+  notes         String?
+
+  // AI Analysis
+  aiAnalyzed    Boolean  @default(false)
+  aiConfidence  Float?
+  aiReasoning   String?
+  aiReasoningAr String?
+
+  // Admin override
+  overridden    Boolean  @default(false)
+  overriddenBy  String?
+  overrideReason String?
+
+  // Evidence
+  photoUrl      String?
+  documentUrl   String?
+
+  inspectionId  String
+  inspection    Inspection @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+  specId        String
+  spec          InspectionSpec @relation(fields: [specId], references: [id])
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([inspectionId, specId])
+  @@index([inspectionId])
+  @@index([specId])
+}
+
+enum ResultStatus {
+  PASS
+  FAIL
+  UNCERTAIN
+  SKIPPED
+}
+
+// Generated PDF reports
+model Report {
+  id            String   @id @default(cuid())
+  pdfUrl        String?
+  generatedAt   DateTime @default(now())
+
+  inspectionId  String   @unique
+  inspection    Inspection @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+
+  @@index([generatedAt])
+}
